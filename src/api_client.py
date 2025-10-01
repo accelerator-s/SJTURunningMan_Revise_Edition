@@ -1,19 +1,18 @@
-# --- START OF FILE src/api_client.py ---
 import requests
 import json
 from urllib.parse import quote
-from src.utils import log_output, SportsUploaderError # <-- 确保 SportsUploaderError 被导入
+from src.utils import log_output, SportsUploaderError
 
-def make_request(method, url, headers, params=None, data=None, log_cb=None, stop_check_cb=None): # <-- 添加 stop_check_cb
+def make_request(method, url, headers, params=None, data=None, log_cb=None, stop_check_cb=None):
     """通用HTTP请求函数"""
     try:
-        if stop_check_cb and stop_check_cb(): # <-- 在请求前检查停止
+        if stop_check_cb and stop_check_cb():
             log_output("API请求被中断。", "warning", log_cb)
             raise SportsUploaderError("任务已停止。")
 
-        timeout_value = 15 # 增加超时时间，避免网络波动
+        timeout_value = 15
 
-        response = None # 初始化response，以防请求失败前没有赋值
+        response = None
 
         if method.upper() == 'GET':
             response = requests.get(url, headers=headers, params=params, timeout=timeout_value)
@@ -22,7 +21,7 @@ def make_request(method, url, headers, params=None, data=None, log_cb=None, stop
         else:
             raise ValueError(f"Unsupported HTTP method: {method}")
 
-        if stop_check_cb and stop_check_cb(): # <-- 在请求后，处理响应前检查停止
+        if stop_check_cb and stop_check_cb():
             log_output("API响应已获取，但任务被中断。", "warning", log_cb)
             raise SportsUploaderError("任务已停止。")
 
@@ -55,7 +54,7 @@ def make_request(method, url, headers, params=None, data=None, log_cb=None, stop
         raise SportsUploaderError(f"JSON Decode Error: {response.text if response else 'No response'}")
 
 
-def get_authorization_token_and_rules(config, log_cb=None, stop_check_cb=None): # <-- 添加 stop_check_cb
+def get_authorization_token_and_rules(config, log_cb=None, stop_check_cb=None):
     """
     通过GET请求获取Authorization Token，并随后获取跑步规则。
     """
@@ -79,7 +78,7 @@ def get_authorization_token_and_rules(config, log_cb=None, stop_check_cb=None): 
     }
 
     log_output(f"Attempting to get Authorization Token from: {config['UID_URL']}", callback=log_cb)
-    uid_response_data = make_request('GET', config['UID_URL'], common_app_headers, log_cb=log_cb, stop_check_cb=stop_check_cb) # <-- 传递 stop_check_cb
+    uid_response_data = make_request('GET', config['UID_URL'], common_app_headers, log_cb=log_cb, stop_check_cb=stop_check_cb)
 
     auth_token = None
     if uid_response_data.get('code') == 0 and 'uid' in uid_response_data.get('data', {}):
@@ -88,18 +87,18 @@ def get_authorization_token_and_rules(config, log_cb=None, stop_check_cb=None): 
     else:
         raise SportsUploaderError(f"Failed to get Authorization Token: {uid_response_data}")
 
-    if stop_check_cb and stop_check_cb(): # <-- 检查停止
+    if stop_check_cb and stop_check_cb():
         log_output("任务被请求停止，正在退出...", "warning", log_cb)
         raise SportsUploaderError("任务已停止。")
 
     log_output(f"\nAttempting to get MyData from: {config['MY_DATA_URL']}", callback=log_cb)
     try:
-        make_request('GET', config['MY_DATA_URL'], common_app_headers, log_cb=log_cb, stop_check_cb=stop_check_cb) # <-- 传递 stop_check_cb
+        make_request('GET', config['MY_DATA_URL'], common_app_headers, log_cb=log_cb, stop_check_cb=stop_check_cb)
         log_output(f"Successfully sent MyData request.", callback=log_cb)
     except Exception as e:
         log_output(f"Warning: Failed to get MyData (this might be expected or ignorable): {e}", "warning", log_cb)
 
-    if stop_check_cb and stop_check_cb(): # <-- 检查停止
+    if stop_check_cb and stop_check_cb():
         log_output("任务被请求停止，正在退出...", "warning", log_cb)
         raise SportsUploaderError("任务已停止。")
 
@@ -131,11 +130,11 @@ def get_authorization_token_and_rules(config, log_cb=None, stop_check_cb=None): 
     url = config["POINT_RULE_URL"]
 
     log_output(f"\nGetting point rules from: {url} with location: {current_location_param}", callback=log_cb)
-    point_rule_response_data = make_request('GET', url + params_string, point_rule_headers, log_cb=log_cb, stop_check_cb=stop_check_cb) # <-- 传递 stop_check_cb
+    point_rule_response_data = make_request('GET', url + params_string, point_rule_headers, log_cb=log_cb, stop_check_cb=stop_check_cb)
 
     return auth_token, point_rule_response_data.get('data', {})
 
-def upload_running_data(config, auth_token, running_data, log_cb=None, stop_check_cb=None): # <-- 添加 stop_check_cb
+def upload_running_data(config, auth_token, running_data, log_cb=None, stop_check_cb=None):
     """
     上传跑步数据到服务器。
     """
@@ -148,7 +147,7 @@ def upload_running_data(config, auth_token, running_data, log_cb=None, stop_chec
         "User-Agent": "okhttp/4.10.0"
     }
 
-    if stop_check_cb and stop_check_cb(): # <-- 检查停止
+    if stop_check_cb and stop_check_cb():
         log_output("任务被请求停止，正在退出...", "warning", log_cb)
         raise SportsUploaderError("任务已停止。")
 
@@ -158,7 +157,7 @@ def upload_running_data(config, auth_token, running_data, log_cb=None, stop_chec
         headers,
         data=json.dumps(running_data),
         log_cb=log_cb,
-        stop_check_cb=stop_check_cb # <-- 传递 stop_check_cb
+        stop_check_cb=stop_check_cb
     )
     log_output(f"Upload Response: {json.dumps(response, indent=2)}", callback=log_cb)
     return response

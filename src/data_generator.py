@@ -1,9 +1,8 @@
-# --- START OF FILE src/data_generator.py ---
 import math
 import uuid
 import time
 import random
-from src.utils import haversine_distance, log_output, TRACK_POINT_DECIMAL_PLACES, get_current_epoch_ms, SportsUploaderError # <-- 确保 SportsUploaderError 被导入
+from src.utils import haversine_distance, log_output, TRACK_POINT_DECIMAL_PLACES, get_current_epoch_ms, SportsUploaderError
 
 def interpolate_points(start_lat, start_lon, end_lat, end_lon, speed_mps, interval_seconds):
     """
@@ -74,7 +73,7 @@ def interpolate_points(start_lat, start_lon, end_lat, end_lon, speed_mps, interv
     return points, segment_distance, math.ceil(segment_duration_seconds)
 
 
-def split_track_into_segments(all_points_with_time, total_duration_sec, min_segment_points=5, stop_check_cb=None): # <-- 添加 stop_check_cb
+def split_track_into_segments(all_points_with_time, total_duration_sec, min_segment_points=5, stop_check_cb=None):
     """
     将所有带有locatetime的轨迹点拆分为多个轨迹段。
     并分配不同的 status 和 tstate。
@@ -93,7 +92,7 @@ def split_track_into_segments(all_points_with_time, total_duration_sec, min_segm
         return tracks
 
     while current_start_point_idx < len(all_points_with_time):
-        if stop_check_cb and stop_check_cb(): # <-- 检查停止
+        if stop_check_cb and stop_check_cb():
             log_output("轨迹生成被中断。", "warning")
             raise SportsUploaderError("任务已停止。")
 
@@ -149,7 +148,7 @@ def split_track_into_segments(all_points_with_time, total_duration_sec, min_segm
     return tracks
 
 
-def generate_running_data_payload(config, required_signpoints, point_rules_data, log_cb=None, stop_check_cb=None): # <-- 添加 stop_check_cb
+def generate_running_data_payload(config, required_signpoints, point_rules_data, log_cb=None, stop_check_cb=None):
     """
     生成符合POST请求体格式的跑步数据，并整合打卡点。
     """
@@ -174,7 +173,7 @@ def generate_running_data_payload(config, required_signpoints, point_rules_data,
     current_locatetime_ms = config['START_TIME_EPOCH_MS'] if config['START_TIME_EPOCH_MS'] is not None else get_current_epoch_ms()
 
     for i in range(len(all_path_segments) - 1):
-        if stop_check_cb and stop_check_cb(): # <-- 检查停止
+        if stop_check_cb and stop_check_cb():
             log_output("轨迹插值被中断。", "warning")
             raise SportsUploaderError("任务已停止。")
 
@@ -207,7 +206,7 @@ def generate_running_data_payload(config, required_signpoints, point_rules_data,
         last_point_time_ms = full_interpolated_points_with_time[-1]['locatetime']
         actual_total_duration_sec = math.ceil((last_point_time_ms - first_point_time_ms + config['INTERVAL_SECONDS'] * 1000) / 1000)
 
-    tracks_list = split_track_into_segments(full_interpolated_points_with_time, actual_total_duration_sec, stop_check_cb=stop_check_cb) # <-- 传递 stop_check_cb
+    tracks_list = split_track_into_segments(full_interpolated_points_with_time, actual_total_duration_sec, stop_check_cb=stop_check_cb)
     actual_total_distance = sum(t['distance'] for t in tracks_list)
 
     run_id = point_rules_data.get('rules', {}).get('id', 6)

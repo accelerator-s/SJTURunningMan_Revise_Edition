@@ -1,7 +1,6 @@
-# --- START OF FILE qtui.py ---
 import sys
 import json
-import os # <-- 确保导入 os
+import os
 import datetime
 import time
 from PySide6.QtWidgets import (
@@ -13,28 +12,23 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import QThread, Signal, QDateTime, Qt, QUrl
 from PySide6.QtGui import QTextCursor, QFont, QColor, QTextCharFormat, QPalette, QBrush, QIcon, QDesktopServices
 
-# 导入解耦后的模块
 from src.main import run_sports_upload
-from src.utils import SportsUploaderError, get_base_path # <-- 从 utils 导入 get_base_path
-# config_manager 的 CONFIGS_DIR 和 DEFAULT_CONFIG_FILE 将在 config_manager.py 中修改，
-# 这里只需要导入 ConfigManager 类
-from src.config_manager import ConfigManager, CONFIGS_DIR, DEFAULT_CONFIG_FILE_NAME # <-- 导入 CONFIGS_DIR 和 DEFAULT_CONFIG_FILE_NAME
+from src.utils import SportsUploaderError, get_base_path
+from src.config_manager import ConfigManager, CONFIGS_DIR, DEFAULT_CONFIG_FILE_NAME
 from src.help_dialog import HelpDialog
 
-# 定义资源和配置文件夹的相对路径（相对于 get_base_path()）
 RESOURCES_SUB_DIR = "assets"
 CONFIGS_SUB_DIR = "configs"
 
-# 完整的资源目录路径
 RESOURCES_FULL_PATH = os.path.join(get_base_path(), RESOURCES_SUB_DIR)
 
 class WorkerThread(QThread):
     """
     工作线程，用于在后台执行跑步数据上传任务，避免UI冻结。
     """
-    progress_update = Signal(int, int, str)  # current_value, max_value, message
-    log_output = Signal(str, str)  # message, level ("info", "warning", "error", "success")
-    finished = Signal(bool, str)  # success, message
+    progress_update = Signal(int, int, str)
+    log_output = Signal(str, str)
+    finished = Signal(bool, str)
 
     def __init__(self, config_data):
         super().__init__()
@@ -48,7 +42,7 @@ class WorkerThread(QThread):
                 self.config_data,
                 progress_callback=self.progress_callback,
                 log_cb=self.log_callback,
-                stop_check_cb=self.isInterruptionRequested # <-- 传递 QThread 提供的中断检查回调
+                stop_check_cb=self.isInterruptionRequested
             )
         except SportsUploaderError as e:
             self.log_output.emit(f"任务中断: {e}", "error")
@@ -59,14 +53,12 @@ class WorkerThread(QThread):
             message = f"未预期的错误: {e}"
             success = False
         finally:
-            # 检查是否是由于中断而退出
             if self.isInterruptionRequested() and not success:
                  self.finished.emit(False, "任务已手动终止。")
             else:
                  self.finished.emit(success, message)
 
     def progress_callback(self, current, total, message):
-        # 即使被请求中断，进度更新也应继续，因为可能在做清理工作
         self.progress_update.emit(current, total, message)
 
     def log_callback(self, message, level):
@@ -77,28 +69,23 @@ class SportsUploaderUI(QWidget):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("SJTU 体育跑步上传工具")
-        # 使用新的 RESOURCES_FULL_PATH
-        self.setWindowIcon(QIcon(os.path.join(RESOURCES_FULL_PATH, "SJTURM.png"))) # <-- 修改这里
+        self.setWindowIcon(QIcon(os.path.join(RESOURCES_FULL_PATH, "SJTURM.png")))
 
         self.thread = None
         self.config = {}
-        # 初始加载时，ConfigManager 会使用自己的路径逻辑，
-        # 这里只是提供一个给 load_settings_to_ui 的默认文件名
-        self.current_config_filename = DEFAULT_CONFIG_FILE_NAME # <-- 修改这里，传入文件名即可
+        self.current_config_filename = DEFAULT_CONFIG_FILE_NAME
 
         self.setup_ui_style()
         self.init_ui()
-        # 实际加载配置时，会通过 ConfigManager 拼接路径
         self.load_settings_to_ui(self.current_config_filename)
 
-        self.setGeometry(100, 100, 800, 950)  # 设置一个默认的初始窗口大小
-        self.setMinimumSize(500, 650)  # 调整最小窗口大小
+        self.setGeometry(100, 100, 800, 950)
+        self.setMinimumSize(500, 650)
 
         self.adjust_content_width(self.width())
 
     def setup_ui_style(self):
         """设置UI的整体样式，改为白色背景和Fluent设计。"""
-        # 应用浅色主题 (白色背景)
         palette = self.palette()
         palette.setColor(QPalette.Window, QColor(255, 255, 255))
         palette.setColor(QPalette.WindowText, QColor(30, 30, 30))
@@ -115,7 +102,6 @@ class SportsUploaderUI(QWidget):
         palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
         self.setPalette(palette)
 
-        # 应用Qt样式表 (QSS)
         self.setStyleSheet("""
             QGroupBox {
                 font-size: 11pt;
@@ -212,7 +198,6 @@ class SportsUploaderUI(QWidget):
                 padding-top: 5px;
                 padding-bottom: 5px;
             }
-            /* 调整开始上传按钮的颜色 */
             #startButton {
                 background-color: rgb(76, 175, 80);
             }
@@ -242,18 +227,15 @@ class SportsUploaderUI(QWidget):
         """)
 
     def init_ui(self):
-        # 顶层布局，用于居中 center_widget
         top_h_layout = QHBoxLayout()
         top_h_layout.setContentsMargins(0, 0, 0, 0)
         top_h_layout.setSpacing(0)
 
-        # main_layout 承载所有可见UI内容，现在嵌套在 center_widget 中
         self.center_widget = QWidget()
         main_layout = QVBoxLayout(self.center_widget)
         main_layout.setContentsMargins(15, 15, 15, 15)
         main_layout.setSpacing(10)
 
-        # scroll_area 和 scroll_content 保持原样，作为 main_layout 的一个子项
         self.scroll_area = QScrollArea()
         self.scroll_content = QWidget()
         scroll_layout = QVBoxLayout(self.scroll_content)
@@ -262,14 +244,11 @@ class SportsUploaderUI(QWidget):
         self.scroll_area.setWidgetResizable(True)
         self.scroll_area.setWidget(self.scroll_content)
 
-        # 将 scroll_area 添加到 center_widget 的 main_layout 中
         main_layout.addWidget(self.scroll_area)
 
-        # --- 用户信息配置 ---
         user_group = QGroupBox("用户配置")
         user_form_layout = QFormLayout()
 
-        # Cookie 输入项的修改
         cookie_prompt_layout = QHBoxLayout()
         cookie_label = QLabel("Cookie:")
         get_cookie_link = QLabel('<a href="#" id="getCookieLink">获取</a>')
@@ -285,9 +264,9 @@ class SportsUploaderUI(QWidget):
         user_form_layout.addRow(cookie_container_widget)
 
         self.keepalive_input = QLineEdit()
-        self.keepalive_input.setPlaceholderText("keepalive=... (从浏览器复制)") # 提示语更精确
+        self.keepalive_input.setPlaceholderText("keepalive=... (从浏览器复制)")
         self.jsessionid_input = QLineEdit()
-        self.jsessionid_input.setPlaceholderText("JSESSIONID=... (从浏览器复制)") # 提示语更精确
+        self.jsessionid_input.setPlaceholderText("JSESSIONID=... (从浏览器复制)")
 
         user_form_layout.addRow("Keepalive:", self.keepalive_input)
         user_form_layout.addRow("JSESSIONID:", self.jsessionid_input)
@@ -298,7 +277,6 @@ class SportsUploaderUI(QWidget):
         user_group.setLayout(user_form_layout)
         scroll_layout.addWidget(user_group)
 
-        # --- 跑步路线配置 ---
         route_group = QGroupBox("跑步路线配置")
         route_form_layout = QFormLayout()
         self.start_lat_input = QLineEdit()
@@ -312,7 +290,6 @@ class SportsUploaderUI(QWidget):
         route_group.setLayout(route_form_layout)
         scroll_layout.addWidget(route_group)
 
-        # --- 跑步参数配置 ---
         param_group = QGroupBox("跑步参数配置")
         param_form_layout = QFormLayout()
         self.speed_input = QLineEdit()
@@ -324,7 +301,6 @@ class SportsUploaderUI(QWidget):
         param_group.setLayout(param_form_layout)
         scroll_layout.addWidget(param_group)
 
-        # --- 跑步时间配置 ---
         time_group = QGroupBox("跑步时间配置")
         time_layout = QVBoxLayout()
         self.use_current_time_checkbox = QCheckBox("使用当前时间")
@@ -343,15 +319,12 @@ class SportsUploaderUI(QWidget):
         time_group.setLayout(time_layout)
         scroll_layout.addWidget(time_group)
 
-        # --- 配置管理按钮 ---
         config_button_layout = QHBoxLayout()
         self.load_default_button = QPushButton("加载默认配置")
-        # 传递文件名，ConfigManager 会自行拼接完整路径
         self.load_default_button.clicked.connect(lambda: self.load_settings_to_ui(DEFAULT_CONFIG_FILE_NAME))
         self.save_as_button = QPushButton("保存配置为...")
         self.save_as_button.clicked.connect(self.save_settings_as_dialog)
         self.save_current_button = QPushButton("保存当前配置")
-        # 传递当前文件名，ConfigManager 会自行拼接完整路径
         self.save_current_button.clicked.connect(lambda: self.save_current_settings(self.current_config_filename))
 
         config_button_layout.addWidget(self.load_default_button)
@@ -359,7 +332,6 @@ class SportsUploaderUI(QWidget):
         config_button_layout.addWidget(self.save_current_button)
         scroll_layout.addLayout(config_button_layout)
 
-        # --- 动作按钮 ---
         action_button_layout = QHBoxLayout()
         self.start_button = QPushButton("开始上传")
         self.start_button.setObjectName("startButton")
@@ -378,12 +350,10 @@ class SportsUploaderUI(QWidget):
 
         scroll_layout.addLayout(action_button_layout)
 
-        # --- 进度条 ---
         self.progress_bar = QProgressBar()
         self.progress_bar.setValue(0)
         scroll_layout.addWidget(self.progress_bar)
 
-        # --- 状态和日志输出 ---
         self.status_label = QLabel("状态: 待命")
         scroll_layout.addWidget(self.status_label)
         self.log_output_area = QTextEdit()
@@ -392,7 +362,6 @@ class SportsUploaderUI(QWidget):
         self.log_output_area.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         scroll_layout.addWidget(self.log_output_area)
 
-        # 将 center_widget 居中到顶层 QHBoxLayout
         top_h_layout.addSpacerItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
         top_h_layout.addWidget(self.center_widget)
         top_h_layout.addSpacerItem(QSpacerItem(0, 0, QSizePolicy.Expanding, QSizePolicy.Minimum))
@@ -426,11 +395,10 @@ class SportsUploaderUI(QWidget):
         QDesktopServices.openUrl(QUrl("https://pe.sjtu.edu.cn/phone/#/indexPortrait"))
 
 
-    def load_settings_to_ui(self, filename): # filename 现在是文件名 (如 "default.json")
+    def load_settings_to_ui(self, filename):
         """从指定文件加载配置并填充UI"""
-        # ConfigManager 会自行处理路径拼接
         self.config = ConfigManager.load_config(filename)
-        self.current_config_filename = filename # 存储文件名
+        self.current_config_filename = filename
         self.setWindowTitle(f"SJTU 体育跑步上传工具 - [{os.path.basename(filename)}]")
 
         full_cookie = self.config.get("COOKIE", "")
@@ -440,9 +408,9 @@ class SportsUploaderUI(QWidget):
         for part in parts:
             part = part.strip()
             if part.startswith("keepalive="):
-                keepalive_val = part.replace("keepalive=", "") # 移除前缀，只保留值
+                keepalive_val = part.replace("keepalive=", "")
             elif part.startswith("JSESSIONID="):
-                jsessionid_val = part.replace("JSESSIONID=", "") # 移除前缀，只保留值
+                jsessionid_val = part.replace("JSESSIONID=", "")
 
         self.keepalive_input.setText(keepalive_val)
         self.jsessionid_input.setText(jsessionid_val)
@@ -470,16 +438,15 @@ class SportsUploaderUI(QWidget):
     def get_settings_from_ui(self):
         """从UI获取当前配置并返回字典"""
         try:
-            # 组合 keepalive 和 JSESSIONID
             keepalive = self.keepalive_input.text().strip()
             jsessionid = self.jsessionid_input.text().strip()
             combined_cookie = ""
             if keepalive:
-                combined_cookie += f"keepalive={keepalive}" # <-- 确保拼接为 key=value 格式
+                combined_cookie += f"keepalive={keepalive}"
             if jsessionid:
                 if combined_cookie:
                     combined_cookie += "; "
-                combined_cookie += f"JSESSIONID={jsessionid}" # <-- 确保拼接为 key=value 格式
+                combined_cookie += f"JSESSIONID={jsessionid}"
 
             current_config = {
                 "COOKIE": combined_cookie,
@@ -502,7 +469,6 @@ class SportsUploaderUI(QWidget):
             else:
                 current_config["START_TIME_EPOCH_MS"] = self.start_datetime_input.dateTime().toMSecsSinceEpoch()
 
-            # 验证关键配置项
             if not current_config["COOKIE"] or not current_config["USER_ID"]:
                 raise ValueError("Cookie (keepalive 和 JSESSIONID) 和 用户ID 不能为空。")
 
@@ -513,11 +479,10 @@ class SportsUploaderUI(QWidget):
         except Exception as e:
             raise Exception(f"获取配置时发生未知错误: {e}")
 
-    def save_current_settings(self, filename): # filename 现在是文件名
+    def save_current_settings(self, filename):
         """将当前UI中的配置保存到指定文件。"""
         try:
             new_config = self.get_settings_from_ui()
-            # ConfigManager 会自行处理路径拼接
             if ConfigManager.save_config(new_config, filename):
                 self.config = new_config
                 self.current_config_filename = filename
@@ -531,7 +496,6 @@ class SportsUploaderUI(QWidget):
 
     def save_settings_as_dialog(self):
         """通过文件对话框让用户选择文件名来保存配置。"""
-        # ConfigManager 内部的 CONFIGS_DIR 已经是完整路径
         if not os.path.exists(CONFIGS_DIR):
             os.makedirs(CONFIGS_DIR)
 
@@ -540,7 +504,7 @@ class SportsUploaderUI(QWidget):
             self, "保存配置为", default_filename, "JSON Files (*.json);;All Files (*)"
         )
         if filename:
-            base_filename = os.path.basename(filename) # 只需要文件名
+            base_filename = os.path.basename(filename)
             self.save_current_settings(base_filename)
 
     def start_upload(self):
@@ -626,6 +590,7 @@ class SportsUploaderUI(QWidget):
         self.jsessionid_input.setEnabled(True)
         self.user_id_input.setEnabled(True)
 
+
         self.progress_bar.setValue(100)
 
         if success:
@@ -641,8 +606,7 @@ class SportsUploaderUI(QWidget):
 
     def show_help_dialog(self):
         """显示帮助对话框。"""
-        # HelpDialog 构造函数现在接收一个相对路径，会在内部拼接
-        help_dialog = HelpDialog(self, markdown_relative_path=os.path.join(RESOURCES_SUB_DIR, "help.md")) # <-- 传递相对路径
+        help_dialog = HelpDialog(self, markdown_relative_path=os.path.join(RESOURCES_SUB_DIR, "help.md"))
         help_dialog.exec()
 
 if __name__ == "__main__":

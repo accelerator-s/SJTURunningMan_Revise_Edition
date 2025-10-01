@@ -1,11 +1,10 @@
-# --- START OF FILE src/main.py ---
 import time
 import datetime
 from src.api_client import get_authorization_token_and_rules, upload_running_data
 from src.data_generator import generate_running_data_payload
-from src.utils import log_output, SportsUploaderError, get_current_epoch_ms # <-- 确保 SportsUploaderError 被导入
+from src.utils import log_output, SportsUploaderError, get_current_epoch_ms
 
-def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb=None): # <-- 添加 stop_check_cb
+def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb=None):
     """
     核心的跑步数据生成和上传逻辑，接收配置字典和进度回调函数。
     progress_callback: 接收 (current_value, max_value, message)
@@ -14,7 +13,6 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
     """
     log_output("--- Starting Sports Upload Process ---", callback=log_cb)
 
-    # 每次耗时操作前检查是否需要停止
     if stop_check_cb and stop_check_cb():
         log_output("任务被请求停止，正在退出...", "warning", log_cb)
         return False, "任务已停止。"
@@ -23,7 +21,6 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
     required_signpoints = []
     point_rules_data = {}
 
-    # --- Step 1: Get Authorization Token and Point Rules ---
     try:
         log_output("Step 1/3: Getting Authorization Token and Point Rules...", callback=log_cb)
         if progress_callback: progress_callback(10, 100, "获取认证信息和跑步规则...")
@@ -32,11 +29,10 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
             log_output("任务被请求停止，正在退出...", "warning", log_cb)
             return False, "任务已停止。"
 
-        auth_token_for_upload, point_rules_data = get_authorization_token_and_rules(config, log_cb=log_cb, stop_check_cb=stop_check_cb) # <-- 传递 stop_check_cb
+        auth_token_for_upload, point_rules_data = get_authorization_token_and_rules(config, log_cb=log_cb, stop_check_cb=stop_check_cb)
         required_signpoints = [p for p in point_rules_data.get('points', []) if p.get('isneed') == 'Y']
         log_output(f"Required Signpoints for rule: {required_signpoints}", callback=log_cb)
 
-        # Apply pace rules if available
         rules_meta = point_rules_data.get('rules', {})
         if rules_meta:
             min_sp_s_per_km = rules_meta.get('spmin', 180)
@@ -46,7 +42,6 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
                 min_speed_mps = 1000 / max_sp_s_per_km if max_sp_s_per_km > 0 else 0
                 max_speed_mps = 1000 / min_sp_s_per_km if min_sp_s_per_km > 0 else 0
 
-                # Note: modifying config directly. If immutability is needed, pass a copy.
                 if config["RUNNING_SPEED_MPS"] < min_speed_mps:
                     log_output(
                         f"Adjusting running speed from {config['RUNNING_SPEED_MPS']:.2f} m/s to minimum allowed {min_speed_mps:.2f} m/s",
@@ -72,12 +67,10 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
         log_output(f"An unexpected error occurred during auth/rules retrieval: {e}", "error", log_cb)
         return False, str(e)
 
-    # 检查是否需要停止
     if stop_check_cb and stop_check_cb():
         log_output("任务被请求停止，正在退出...", "warning", log_cb)
         return False, "任务已停止。"
 
-    # --- Step 2: Generate Running Data ---
     log_output("\nStep 2/3: Generating Running Data...", callback=log_cb)
     if progress_callback: progress_callback(40, 100, "生成跑步数据...")
     running_data_payload = None
@@ -89,7 +82,7 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
             required_signpoints,
             point_rules_data,
             log_cb=log_cb,
-            stop_check_cb=stop_check_cb # <-- 传递 stop_check_cb
+            stop_check_cb=stop_check_cb
         )
 
         log_output(f"Generated {len(running_data_payload[0]['tracks'])} track segments.", callback=log_cb)
@@ -111,21 +104,18 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
         log_output(f"An unexpected error occurred during data generation: {e}", "error", log_cb)
         return False, str(e)
 
-    # 检查是否需要停止
     if stop_check_cb and stop_check_cb():
         log_output("任务被请求停止，正在退出...", "warning", log_cb)
         return False, "任务已停止。"
 
-    # --- Step 3: Upload Running Data ---
     if running_data_payload and auth_token_for_upload:
         log_output("\nStep 3/3: Sending Running Data...", callback=log_cb)
         if progress_callback: progress_callback(70, 100, "准备上传跑步数据...")
         try:
-            # Waiting logic
             if config["START_TIME_EPOCH_MS"] is None:
                 log_output(f"模拟等待跑步完成 {total_dur} 秒...", callback=log_cb)
                 for i in range(total_dur):
-                    if stop_check_cb and stop_check_cb(): # <-- 检查停止
+                    if stop_check_cb and stop_check_cb():
                         log_output("任务被请求停止，正在退出...", "warning", log_cb)
                         return False, "任务已停止。"
                     if progress_callback:
@@ -135,16 +125,15 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
             else:
                 log_output("设置了过去的跑步时间，直接准备上传，短暂停顿 3 秒...", callback=log_cb)
                 if progress_callback: progress_callback(80, 100, "短暂停顿...")
-                if stop_check_cb and stop_check_cb(): # <-- 检查停止
+                if stop_check_cb and stop_check_cb():
                     log_output("任务被请求停止，正在退出...", "warning", log_cb)
                     return False, "任务已停止。"
                 time.sleep(3)
 
-            # Upload with retries
             rt = 0
             max_rt = 3
             while rt < max_rt:
-                if stop_check_cb and stop_check_cb(): # <-- 检查停止
+                if stop_check_cb and stop_check_cb():
                     log_output("任务被请求停止，正在退出...", "warning", log_cb)
                     return False, "任务已停止。"
 
@@ -157,7 +146,7 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
                     auth_token_for_upload,
                     running_data_payload,
                     log_cb=log_cb,
-                    stop_check_cb=stop_check_cb # <-- 传递 stop_check_cb
+                    stop_check_cb=stop_check_cb
                 )
 
                 if response.get('code') == 0 and response.get('data'):
@@ -170,7 +159,7 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
                         f"\nWARNING: Uploaded, but response code is 0 with empty data. Server might still process it. Retrying in 3 seconds... (Attempt {rt + 1}/{max_rt})",
                         "warning", log_cb)
                     rt += 1
-                    time.sleep(3) # 重试前也应该检查中断
+                    time.sleep(3)
                     if stop_check_cb and stop_check_cb():
                         log_output("任务被请求停止，正在退出...", "warning", log_cb)
                         return False, "任务已停止。"
@@ -199,7 +188,6 @@ def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb
 
 
 if __name__ == "__main__":
-    # Test configuration (replace with your actual values for standalone run)
     test_config = {
         "COOKIE": "your_keepalive_and_jsessionid_cookie_string_here",
         "USER_ID": "your_user_id",
@@ -209,7 +197,7 @@ if __name__ == "__main__":
         "END_LONGITUDE": 121.455100,
         "RUNNING_SPEED_MPS": 2.5,
         "INTERVAL_SECONDS": 3,
-        "START_TIME_EPOCH_MS": None,  # Or a specific timestamp, e.g., 1721468400000
+        "START_TIME_EPOCH_MS": None,
         "HOST": "pe.sjtu.edu.cn",
         "UID_URL": "https://pe.sjtu.edu.cn/sports/my/uid",
         "MY_DATA_URL": "https://pe.sjtu.edu.cn/sports/my/data",
@@ -223,6 +211,5 @@ if __name__ == "__main__":
     def simple_progress_cb(current, total, message):
         print(f"Progress: {message} ({current}/{total})")
 
-    # 对于 standalone run，stop_check_cb 可以是简单的 lambda False 或一个 Event
     success, msg = run_sports_upload(test_config, progress_callback=simple_progress_cb, log_cb=simple_log_cb, stop_check_cb=lambda: False)
     print(f"\nOperation {'SUCCESS' if success else 'FAILED'}: {msg}")
