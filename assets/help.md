@@ -12,15 +12,16 @@
 - **用户ID:** 必填项。您的Jaccount
 
 **配置获取步骤**
-1. 打开链接 [交我跑官网](https://pe.sjtu.edu.cn/phone/#/indexPortrait),如果你的界面类似下面的，则打开成功。
+
+**1** 打开链接 [交我跑官网](https://pe.sjtu.edu.cn/phone/#/indexPortrait),如果你的界面类似下面的，则打开成功。
 
 ![img.png](help0.png)
 
-2. 登陆后，点击 `F12`，然后打开"应用"界面
+**2** 登陆后，点击 `F12`，然后打开"应用"界面
 
 ![img.png](help1.png)
 
-3. 点击侧边栏的 "Cookie"，查看 `JSESSIONID` 和 `keepalive`，并写到应用内
+**3** 点击侧边栏的 "Cookie"，查看 `JSESSIONID` 和 `keepalive`，并写到应用内
 
 ![img.png](help3.png)
 

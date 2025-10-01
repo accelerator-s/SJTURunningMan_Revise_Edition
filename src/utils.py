@@ -1,11 +1,25 @@
+# --- START OF FILE src/utils.py ---
 import math
 import time
 import datetime
+import os # <-- 新增导入 os
+import sys # <-- 新增导入 sys
 
 # --- 常量 ---
 EARTH_RADIUS_METERS = 6371000  # 地球半径，单位米
 # 轨迹点经纬度精度，根据最终请求内容示例调整为7位小数
 TRACK_POINT_DECIMAL_PLACES = 7
+
+# --- 新增的路径获取函数 ---
+def get_base_path():
+    """获取应用程序的基础路径。
+    在打包后是 .exe 所在的目录，开发时是项目根目录。"""
+    if hasattr(sys, 'frozen'): # PyInstaller 打包后的标识
+        return os.path.dirname(sys.executable)
+    # 对于开发环境，os.path.abspath(__file__) 是 src/utils.py 的路径
+    # 需要往上两级到项目根目录
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 
 class SportsUploaderError(Exception):
     """自定义异常类，用于在UI中捕获和显示错误"""

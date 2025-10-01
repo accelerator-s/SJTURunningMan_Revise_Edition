@@ -1,7 +1,8 @@
+# --- START OF FILE src/api_client.py ---
 import requests
 import json
 from urllib.parse import quote
-from src.utils import log_output, SportsUploaderError
+from src.utils import log_output, SportsUploaderError # <-- 确保 SportsUploaderError 被导入
 
 def make_request(method, url, headers, params=None, data=None, log_cb=None, stop_check_cb=None): # <-- 添加 stop_check_cb
     """通用HTTP请求函数"""

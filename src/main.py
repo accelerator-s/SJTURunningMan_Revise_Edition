@@ -1,8 +1,9 @@
+# --- START OF FILE src/main.py ---
 import time
 import datetime
 from src.api_client import get_authorization_token_and_rules, upload_running_data
 from src.data_generator import generate_running_data_payload
-from src.utils import log_output, SportsUploaderError, get_current_epoch_ms
+from src.utils import log_output, SportsUploaderError, get_current_epoch_ms # <-- 确保 SportsUploaderError 被导入
 
 def run_sports_upload(config, progress_callback=None, log_cb=None, stop_check_cb=None): # <-- 添加 stop_check_cb
     """
