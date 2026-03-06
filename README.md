@@ -8,7 +8,7 @@
 
 - 基于预设闭合环路生成模拟跑步轨迹，配速约 4.5min/km，效果如图：
 
-<img src="./assets/Route.jpg" style="zoom:20%; margin-left:100px;" align="left" />
+<img src="./assets/Route.jpg" width="240" alt="模拟跑步轨迹示意图" />
 
 - 自动上传从前一天起连续 25 天的跑步记录，每天 5km
 
