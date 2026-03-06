@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QTextEdit, QProgressBar, QFormLayout, QGroupBox, QDateTimeEdit,
     QMessageBox, QScrollArea, QSizePolicy, QCheckBox,
-    QSpacerItem
+    QSpacerItem, QDialog, QComboBox
 )
 from PySide6.QtCore import QThread, Signal, QDateTime, Qt, QUrl, QEvent
 from PySide6.QtGui import QTextCursor, QFont, QColor, QTextCharFormat, QPalette, QBrush, QIcon, QDesktopServices
@@ -23,9 +23,6 @@ RESOURCES_SUB_DIR = "assets"
 RESOURCES_FULL_PATH = os.path.join(get_base_path(), RESOURCES_SUB_DIR)
 
 class WorkerThread(QThread):
-    """
-    工作线程，用于在后台执行跑步数据上传任务，避免UI冻结。
-    """
     progress_update = Signal(int, int, str)
     log_output = Signal(str, str)
     finished = Signal(bool, str)
@@ -104,8 +101,8 @@ class SportsUploaderUI(QWidget):
         palette.setColor(QPalette.Button, QColor(255, 255, 255))
         palette.setColor(QPalette.ButtonText, QColor(51, 51, 51))
         palette.setColor(QPalette.BrightText, QColor("red"))
-        palette.setColor(QPalette.Link, QColor(74, 144, 226))
-        palette.setColor(QPalette.Highlight, QColor(74, 144, 226))
+        palette.setColor(QPalette.Link, QColor(106, 153, 200))
+        palette.setColor(QPalette.Highlight, QColor(106, 153, 200))
         palette.setColor(QPalette.HighlightedText, QColor(255, 255, 255))
         self.setPalette(palette)
 
@@ -127,18 +124,18 @@ class SportsUploaderUI(QWidget):
                 subcontrol-origin: margin;
                 subcontrol-position: top center;
                 padding: 0 8px;
-                color: rgb(74, 144, 226);
+                color: rgb(55, 85, 125);
             }
             QLineEdit, QDateTimeEdit {
                 background-color: rgb(255, 255, 255);
                 border: 1px solid rgb(204, 204, 204);
                 border-radius: 4px;
                 padding: 8px;
-                selection-background-color: rgb(74, 144, 226);
+                selection-background-color: rgb(106, 153, 200);
                 color: rgb(51, 51, 51);
             }
             QLineEdit:focus, QDateTimeEdit:focus {
-                border: 1px solid rgb(74, 144, 226);
+                border: 1px solid rgb(106, 153, 200);
             }
             QDateTimeEdit::drop-down {
                 subcontrol-origin: padding;
@@ -160,7 +157,7 @@ class SportsUploaderUI(QWidget):
                 max-height: 36px;
             }
             QPushButton:hover {
-                border: 1px solid rgb(74, 144, 226);
+                border: 1px solid rgb(106, 153, 200);
                 background-color: rgb(250, 250, 250);
             }
             QPushButton:pressed {
@@ -180,7 +177,7 @@ class SportsUploaderUI(QWidget):
                 max-height: 20px;
             }
             QProgressBar::chunk {
-                background-color: rgb(74, 144, 226);
+                background-color: rgb(116, 160, 205);
                 border-radius: 4px;
             }
             QTextEdit {
@@ -205,8 +202,8 @@ class SportsUploaderUI(QWidget):
                 background-color: rgb(255, 255, 255);
             }
             QCheckBox::indicator:checked {
-                background-color: rgb(74, 144, 226);
-                border: 1px solid rgb(74, 144, 226);
+                background-color: rgb(106, 153, 200);
+                border: 1px solid rgb(106, 153, 200);
             }
             QCheckBox::indicator:disabled {
                 border: 1px solid rgb(230, 230, 230);
@@ -218,36 +215,36 @@ class SportsUploaderUI(QWidget):
                 color: rgb(102, 102, 102);
             }
             #startButton {
-                background-color: rgb(76, 175, 80);
+                background-color: rgb(106, 153, 200);
                 color: white;
-                border: 1px solid rgb(76, 175, 80);
+                border: 1px solid rgb(106, 153, 200);
             }
             #startButton:hover {
-                background-color: rgb(67, 160, 71);
-                border: 1px solid rgb(67, 160, 71);
+                background-color: rgb(86, 133, 180);
+                border: 1px solid rgb(86, 133, 180);
             }
             #startButton:pressed {
-                background-color: rgb(56, 142, 60);
+                background-color: rgb(70, 115, 160);
             }
             #stopButton {
-                background-color: rgb(220, 53, 69);
+                background-color: rgb(150, 155, 162);
                 color: white;
-                border: 1px solid rgb(220, 53, 69);
+                border: 1px solid rgb(150, 155, 162);
             }
             #stopButton:hover {
-                background-color: rgb(179, 43, 56);
-                border: 1px solid rgb(179, 43, 56);
+                background-color: rgb(130, 135, 142);
+                border: 1px solid rgb(130, 135, 142);
             }
             #stopButton:pressed {
-                background-color: rgb(140, 34, 44);
+                background-color: rgb(115, 120, 128);
             }
             QLabel#getCookieLink {
-                color: rgb(74, 144, 226);
+                color: rgb(106, 153, 200);
                 text-decoration: underline;
                 padding: 0;
             }
             QLabel#getCookieLink:hover {
-                color: rgb(52, 120, 198);
+                color: rgb(70, 115, 160);
             }
         """)
 
@@ -324,31 +321,20 @@ class SportsUploaderUI(QWidget):
         self.setLayout(top_h_layout)
 
     def resizeEvent(self, event):
-        """
-        槽函数，用于处理窗口大小调整事件。
-        根据窗口宽度调整内部内容区域的最大宽度。
-        """
         super().resizeEvent(event)
         self.adjust_content_width(event.size().width())
 
     def adjust_content_width(self, window_width):
-        """
-        根据给定的窗口宽度，计算并设置 center_widget 的固定宽度。
-        """
-        # 不强制很大的最小宽度，使用窗口宽度的 90% 或最大 600 的限制
         calculated_width = int(min(window_width * 0.9, 600))
-        # 保证最小为 280，以适配窄窗口（比如 300px）
         calculated_width = max(280, calculated_width)
         self.center_widget.setFixedWidth(calculated_width)
 
     def center_window(self):
-        """将主窗口居中到主显示器的可用区域中心。"""
         try:
             screen = QApplication.primaryScreen()
             if screen is None:
                 return
             available = screen.availableGeometry()
-
             fg = self.frameGeometry()
             fg.moveCenter(available.center())
             self.move(fg.topLeft())
@@ -356,44 +342,112 @@ class SportsUploaderUI(QWidget):
             return
 
     def get_settings_from_ui(self):
-        """从UI获取当前配置并返回字典"""
-        try:
-            username = self.username_input.text().strip()
-            password = self.password_input.text()
+        """从UI获取当前配置"""
+        username = self.username_input.text().strip()
+        password = self.password_input.text()
 
-            current_config = {
-                "USER_ID": username,
-                "PASSWORD": password,
-                "START_LATITUDE": float(self.config.get("START_LATITUDE", 31.031599)),
-                "START_LONGITUDE": float(self.config.get("START_LONGITUDE", 121.442938)),
-                "END_LATITUDE": float(self.config.get("END_LATITUDE", 31.0264)),
-                "END_LONGITUDE": float(self.config.get("END_LONGITUDE", 121.4551)),
-                "RUNNING_SPEED_MPS": round(1000.0 / (3.5 * 60), 3),
-                "INTERVAL_SECONDS": int(self.config.get("INTERVAL_SECONDS", 3)),
-                "HOST": "pe.sjtu.edu.cn",
-                "UID_URL": "https://pe.sjtu.edu.cn/sports/my/uid",
-                "MY_DATA_URL": "https://pe.sjtu.edu.cn/sports/my/data",
-                "POINT_RULE_URL": "https://pe.sjtu.edu.cn/api/running/point-rule",
-                "UPLOAD_URL": "https://pe.sjtu.edu.cn/api/running/result/upload"
-            }
+        if not username or not password:
+            raise ValueError("用户名和密码不能为空。")
 
-            # START_TIME_EPOCH_MS 由后端生成，不从 UI 获取
+        return {
+            "USER_ID": username,
+            "PASSWORD": password,
+            "START_LATITUDE": 31.031599,
+            "START_LONGITUDE": 121.442938,
+            "RUNNING_SPEED_MPS": round(1000.0 / (5 * 60), 3),
+            "INTERVAL_SECONDS": 3,
+            "HOST": "pe.sjtu.edu.cn",
+            "UID_URL": "https://pe.sjtu.edu.cn/sports/my/uid",
+            "MY_DATA_URL": "https://pe.sjtu.edu.cn/sports/my/data",
+            "POINT_RULE_URL": "https://pe.sjtu.edu.cn/api/running/point-rule",
+            "UPLOAD_URL": "https://pe.sjtu.edu.cn/api/running/result/upload"
+        }
 
-            if not current_config["USER_ID"] or not current_config["PASSWORD"]:
-                raise ValueError("用户名和密码不能为空。")
+    def _2fa_select_method(self):
+        """二次验证：让用户选择验证方式"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("异地登录验证")
+        dialog.setWindowFlags(Qt.Dialog | Qt.WindowCloseButtonHint)
+        dialog.setFixedSize(360, 180)
+        dialog.setWindowModality(Qt.WindowModal)
 
-            return current_config
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
 
-        except ValueError as e:
-            raise ValueError(f"输入错误: {e}")
-        except Exception as e:
-            raise Exception(f"获取配置时发生未知错误: {e}")
+        label = QLabel("请选择验证方式:")
+        label.setStyleSheet("font-size: 11pt; color: #333;")
+        layout.addWidget(label)
+
+        combo = QComboBox()
+        combo.addItems(["交我办消息", "邮箱", "短信"])
+        combo.setStyleSheet("padding: 6px; font-size: 10pt;")
+        layout.addWidget(combo)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        ok_btn = QPushButton("确定")
+        ok_btn.setFixedWidth(80)
+        ok_btn.clicked.connect(dialog.accept)
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setFixedWidth(80)
+        cancel_btn.clicked.connect(dialog.reject)
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        method_map = {"交我办消息": "app", "邮箱": "email", "短信": "sms"}
+        if dialog.exec() == QDialog.Accepted:
+            return method_map.get(combo.currentText(), "app")
+        return None
+
+    def _2fa_get_code(self):
+        """二次验证：获取用户输入的验证码"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("输入验证码")
+        dialog.setWindowFlags(Qt.Dialog | Qt.WindowCloseButtonHint)
+        dialog.setFixedSize(360, 180)
+        dialog.setWindowModality(Qt.WindowModal)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(14)
+
+        label = QLabel("请输入6位验证码（输入 r 可重新发送）:")
+        label.setStyleSheet("font-size: 11pt; color: #333;")
+        layout.addWidget(label)
+
+        line_edit = QLineEdit()
+        line_edit.setPlaceholderText("验证码")
+        line_edit.setStyleSheet("padding: 6px; font-size: 10pt;")
+        layout.addWidget(line_edit)
+
+        btn_layout = QHBoxLayout()
+        btn_layout.addStretch()
+        ok_btn = QPushButton("确定")
+        ok_btn.setFixedWidth(80)
+        ok_btn.clicked.connect(dialog.accept)
+        cancel_btn = QPushButton("取消")
+        cancel_btn.setFixedWidth(80)
+        cancel_btn.clicked.connect(dialog.reject)
+        btn_layout.addWidget(ok_btn)
+        btn_layout.addWidget(cancel_btn)
+        layout.addLayout(btn_layout)
+
+        if dialog.exec() == QDialog.Accepted:
+            code = line_edit.text().strip()
+            return code if code else None
+        return None
+
+    def _2fa_show_message(self, msg):
+        """二次验证：显示提示信息"""
+        self.log_output_text(msg, "info")
 
     def start_upload(self):
         self.log_output_area.clear()
         self.progress_bar.setValue(0)
         self.status_label.setText("状态: 准备中...")
-        self.log_output_text("准备开始上传...", "info")
+        self.log_output_text("开始准备...", "info")
 
         try:
             current_config_to_send = self.get_settings_from_ui()
@@ -408,13 +462,18 @@ class SportsUploaderUI(QWidget):
         self.username_input.setEnabled(False)
         self.password_input.setEnabled(False)
 
-        # 调用 login.py 获取 session，使用 UI 中的用户名/密码
         try:
             username = current_config_to_send.get("USER_ID")
             password = current_config_to_send.get("PASSWORD")
-            session = login.login(username, password)
+
+            two_fa_cb = {
+                'select_method': self._2fa_select_method,
+                'get_code': self._2fa_get_code,
+                'show_message': self._2fa_show_message,
+            }
+
+            session = login.login(username, password, two_fa_cb=two_fa_cb)
             current_config_to_send["SESSION"] = session
-            # USER_ID 即 Jaccount 用户名
             current_config_to_send["USER_ID"] = username
         except Exception as e:
             self.log_output_text(f"登录失败: {e}", "error")
@@ -433,34 +492,31 @@ class SportsUploaderUI(QWidget):
         self._thread.start()
 
     def stop_upload(self):
-        """请求工作线程停止。"""
         if self._thread and self._thread.isRunning():
             self._thread.requestInterruption()
-            self.log_output_text("已发送停止请求，请等待任务清理并退出...", "warning")
+            self.log_output_text("正在停止...", "warning")
             self.stop_button.setEnabled(False)
             self.status_label.setText("状态: 正在停止...")
         else:
-            self.log_output_text("没有运行中的任务可以停止。", "info")
+            self.log_output_text("没有运行中的任务。", "info")
 
 
     def update_progress(self, current, total, message):
-        """更新进度条和状态信息"""
         self.progress_bar.setMaximum(total)
         self.progress_bar.setValue(current)
         self.status_label.setText(f"状态: {message}")
 
     def log_output_text(self, message, level="info"):
-        """将日志信息添加到文本区域，并根据级别着色"""
         cursor = self.log_output_area.textCursor()
         cursor.movePosition(QTextCursor.End)
 
         format = QTextCharFormat()
         if level == "error":
-            format.setForeground(QColor("#DC3545"))
+            format.setForeground(QColor("#A0705A"))
         elif level == "warning":
-            format.setForeground(QColor("#FFA500"))
+            format.setForeground(QColor("#C49A3C"))
         elif level == "success":
-            format.setForeground(QColor("#4CAF50"))
+            format.setForeground(QColor("#5A7DA0"))
         else:
             format.setForeground(QColor("#333333"))
 
@@ -487,7 +543,6 @@ class SportsUploaderUI(QWidget):
         self.log_output_area.ensureCursorVisible()
 
     def upload_finished(self, success, message):
-        """上传任务完成后的处理"""
         self.start_button.setEnabled(True)
         self.stop_button.setEnabled(False)
         self.info_button.setEnabled(True)
@@ -498,21 +553,16 @@ class SportsUploaderUI(QWidget):
 
         if success:
             self.status_label.setText("状态: 上传成功！")
-            self.log_output_text(f"操作完成: {message}", "success")
+            self.log_output_text(f"完成: {message}", "success")
             QMessageBox.information(self, "上传结果", message)
         else:
             self.status_label.setText("状态: 上传失败！")
-            self.log_output_text(f"操作失败: {message}", "error")
+            self.log_output_text(f"失败: {message}", "error")
 
         self._thread = None
 
 
     def show_info_dialog(self):
-        """显示关于对话框（非模态）。
-
-        使用 HelpWidget，作为非模态窗口显示，并保留对实例的引用以防止被垃圾回收。
-        当窗口关闭时清理引用。
-        """
         try:
             # 如果已有关于窗口实例：
             # - 若窗口仍可见，则激活并返回；
@@ -566,7 +616,6 @@ class SportsUploaderUI(QWidget):
             QMessageBox.warning(self, "显示失败", f"无法显示关于窗口: {e}")
 
     def eventFilter(self, watched, event):
-        """拦截 HelpWidget 的 Close/Hide 事件，清理保存的引用以允许再次打开。"""
         try:
             if watched is getattr(self, "_help_window", None):
                 # 使用数值来避免某些静态类型检查器对 QEvent 枚举成员的误报

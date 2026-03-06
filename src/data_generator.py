@@ -1,83 +1,147 @@
 import math
 import uuid
-import time
 import random
+import os
 from utils.auxiliary_util import haversine_distance, log_output, TRACK_POINT_DECIMAL_PLACES, get_current_epoch_ms, SportsUploaderError
 
-def interpolate_points(start_lat, start_lon, end_lat, end_lon, speed_mps, interval_seconds):
-    """
-    在起点和终点之间以给定速度和采样间隔插值生成轨迹点。
-    返回一个包含轨迹点字典的列表，以及这段的距离和时长。
-    注意：这里生成的点不包含locatetime，由generate_running_data统一分配。
-    """
-    points = []
 
-    start_lat_calc = float(f"{start_lat:.14f}")
-    start_lon_calc = float(f"{start_lon:.14f}")
-    end_lat_calc = float(f"{end_lat:.14f}")
-    end_lon_calc = float(f"{end_lon:.14f}")
+def read_route_from_file(file_path):
+    """从文件读取路线坐标，每行格式：经度,纬度"""
+    coords = []
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split(',')
+            if len(parts) != 2:
+                continue
+            try:
+                lon, lat = float(parts[0]), float(parts[1])
+                coords.append((lon, lat))
+            except ValueError:
+                continue
+    if not coords:
+        raise SportsUploaderError(f"路线文件为空或格式不正确: {file_path}")
+    return coords
 
-    start_lat_rad = math.radians(start_lat_calc)
-    start_lon_rad = math.radians(start_lon_calc)
-    end_lat_rad = math.radians(end_lat_calc)
-    end_lon_rad = math.radians(end_lon_calc)
 
-    segment_distance = haversine_distance(start_lat_calc, start_lon_calc, end_lat_calc, end_lon_calc)
-    segment_duration_seconds = segment_distance / speed_mps
+def densify_route(coords, interval_m):
+    """在相邻坐标点之间按距离间隔插入中间点，增加轨迹密度"""
+    if len(coords) < 2:
+        return list(coords)
 
-    num_steps = math.ceil(segment_duration_seconds / interval_seconds)
-    if num_steps <= 1 and segment_distance > 0:
-        num_steps = 1
-    elif segment_distance == 0:
-        num_steps = 0
+    result = [coords[0]]
+    for i in range(len(coords) - 1):
+        lon1, lat1 = coords[i]
+        lon2, lat2 = coords[i + 1]
+        seg_dist = haversine_distance(lat1, lon1, lat2, lon2)
 
-    if num_steps == 0:
-        formatted_lat = f"{start_lat_calc:.{TRACK_POINT_DECIMAL_PLACES}f}"
-        formatted_lon = f"{start_lon_calc:.{TRACK_POINT_DECIMAL_PLACES}f}"
-        points.append({
-            "latLng": {"latitude": float(formatted_lat), "longitude": float(formatted_lon)},
-            "location": f"{formatted_lon},{formatted_lat}",
-            "step": 0
-        })
-        return points, segment_distance, math.ceil(segment_duration_seconds)
+        if seg_dist <= 0 or interval_m <= 0:
+            result.append(coords[i + 1])
+            continue
 
-    for i in range(num_steps + 1):
-        fraction = i / num_steps
+        n = int(seg_dist / interval_m)
+        for j in range(1, n + 1):
+            frac = j / (n + 1)
+            mid_lon = lon1 + frac * (lon2 - lon1)
+            mid_lat = lat1 + frac * (lat2 - lat1)
+            result.append((mid_lon, mid_lat))
 
-        interp_lat_rad = start_lat_rad + fraction * (end_lat_rad - start_lat_rad)
-        interp_lon_rad = start_lon_rad + fraction * (end_lon_rad - start_lon_rad)
+        result.append(coords[i + 1])
+    return result
 
-        interp_lat = math.degrees(interp_lat_rad)
-        interp_lon = math.degrees(interp_lon_rad)
 
-        formatted_lat = f"{interp_lat:.{TRACK_POINT_DECIMAL_PLACES}f}"
-        formatted_lon = f"{interp_lon:.{TRACK_POINT_DECIMAL_PLACES}f}"
+def route_total_distance(coords):
+    """计算路线总长度（米）"""
+    dist = 0
+    for i in range(len(coords) - 1):
+        lon1, lat1 = coords[i]
+        lon2, lat2 = coords[i + 1]
+        dist += haversine_distance(lat1, lon1, lat2, lon2)
+    return dist
 
-        points.append({
-            "latLng": {"latitude": float(formatted_lat), "longitude": float(formatted_lon)},
-            "location": f"{formatted_lon},{formatted_lat}",
-            "step": 0
-        })
 
-    final_end_lat_formatted = float(f"{end_lat_calc:.{TRACK_POINT_DECIMAL_PLACES}f}")
-    final_end_lon_formatted = float(f"{end_lon_calc:.{TRACK_POINT_DECIMAL_PLACES}f}")
+def _take_partial(coords, distance_m):
+    """沿路线取指定距离的部分坐标"""
+    if len(coords) < 2:
+        return list(coords)
 
-    if abs(points[-1]['latLng']['latitude'] - final_end_lat_formatted) > 1e-10 or \
-            abs(points[-1]['latLng']['longitude'] - final_end_lon_formatted) > 1e-10:
-        points[-1] = {
-            "latLng": {"latitude": final_end_lat_formatted, "longitude": final_end_lon_formatted},
-            "location": f"{final_end_lon_formatted},{final_end_lat_formatted}",
-            "step": 0
-        }
+    result = [coords[0]]
+    traveled = 0
 
-    return points, segment_distance, math.ceil(segment_duration_seconds)
+    for i in range(len(coords) - 1):
+        lon1, lat1 = coords[i]
+        lon2, lat2 = coords[i + 1]
+        seg = haversine_distance(lat1, lon1, lat2, lon2)
+
+        if traveled + seg <= distance_m:
+            result.append(coords[i + 1])
+            traveled += seg
+        else:
+            leftover = distance_m - traveled
+            if seg > 0:
+                frac = leftover / seg
+                final_lon = lon1 + frac * (lon2 - lon1)
+                final_lat = lat1 + frac * (lat2 - lat1)
+                result.append((final_lon, final_lat))
+            break
+
+    return result
+
+
+def build_path_for_distance(coords, target_m, log_cb=None):
+    """循环路线坐标直到达到目标距离"""
+    loop_dist = route_total_distance(coords)
+    if loop_dist <= 0:
+        return list(coords)
+
+    # 起终点距离 ≤ 20m 视为闭合环路
+    s_lon, s_lat = coords[0]
+    e_lon, e_lat = coords[-1]
+    gap = haversine_distance(s_lat, s_lon, e_lat, e_lon)
+    is_loop = gap <= 20
+
+    result = []
+    accumulated = 0
+
+    if is_loop:
+        full_loops = int(target_m / loop_dist)
+        for _ in range(full_loops):
+            result.extend(coords)
+            accumulated += loop_dist
+
+        remaining = target_m - accumulated
+        if remaining > 0:
+            result.extend(_take_partial(coords, remaining))
+    else:
+        # 非闭合路线使用往返模式
+        forward = coords
+        backward = coords[::-1]
+        round_trip = loop_dist * 2
+
+        full_trips = int(target_m / round_trip)
+        for _ in range(full_trips):
+            result.extend(forward)
+            result.extend(backward)
+            accumulated += round_trip
+
+        remaining = target_m - accumulated
+        if remaining > 0:
+            if remaining <= loop_dist:
+                result.extend(_take_partial(forward, remaining))
+            else:
+                result.extend(forward)
+                remaining -= loop_dist
+                result.extend(_take_partial(backward, remaining))
+
+    actual = route_total_distance(result)
+    log_output(f"路线: 单圈{loop_dist:.0f}m, 生成{actual:.0f}m (目标{target_m:.0f}m)", "info", log_cb)
+    return result
 
 
 def split_track_into_segments(all_points_with_time, total_duration_sec, min_segment_points=5, stop_check_cb=None):
-    """
-    将所有带有locatetime的轨迹点拆分为多个轨迹段。
-    并分配不同的 status 和 tstate。
-    """
+    """将轨迹点拆分为多个轨迹段"""
     tracks = []
 
     status_map = {
@@ -149,97 +213,89 @@ def split_track_into_segments(all_points_with_time, total_duration_sec, min_segm
 
 
 def generate_running_data_payload(config, required_signpoints, point_rules_data, log_cb=None, stop_check_cb=None):
-    """
-    生成符合POST请求体格式的跑步数据，并整合打卡点。
-    """
-    # 快速生成路径：忽略用户自定义多段插值，直接生成一段大约 5km、配速约 3.5min/km 的轨迹。
-    target_distance_m = 5000  # 约 5km
-    pace_sec_per_km = 3.5 * 60  # 3.5 分钟每公里 -> 秒/公里
-    total_duration_sec = int(round(pace_sec_per_km * (target_distance_m / 1000.0)))
+    """生成跑步数据"""
+    from utils.auxiliary_util import get_base_path
 
-    interval_seconds = int(config.get('INTERVAL_SECONDS', 3))
-    if interval_seconds <= 0:
-        interval_seconds = 3
+    # 读取路线文件
+    base_path = get_base_path()
+    route_file = os.path.join(base_path, 'default.txt')
+    raw_coords = read_route_from_file(route_file)
 
-    # 计算每个采样点的数量（包含起点和终点）
-    num_intervals = max(1, math.ceil(total_duration_sec / interval_seconds))
-    # 为保证覆盖终点，点数为 num_intervals + 1
-    num_points = num_intervals + 1
+    # 百度坐标偏移校正（百度坐标 → GCJ-02）
+    lon_offset = -0.00651271494735 + 0.000094
+    lat_offset = -0.00560888976477 - 0.000700
+    coords = [(lon + lon_offset, lat + lat_offset) for lon, lat in raw_coords]
+    log_output(f"已加载路线，共 {len(coords)} 个坐标点", "info", log_cb)
 
-    # 计算每秒速度（m/s）
-    speed_mps = target_distance_m / total_duration_sec if total_duration_sec > 0 else config.get('RUNNING_SPEED_MPS', 2.5)
+    # 配速参数：5min/km
+    target_km = config.get('RUN_DISTANCE_KM', 5)
+    target_m = target_km * 1000
+    pace_sec_per_km = 5 * 60  # 5分钟/公里 = 300秒/公里
+    total_sec = int(pace_sec_per_km * target_km)
+    interval = int(config.get('INTERVAL_SECONDS', 3))
+    if interval <= 0:
+        interval = 3
+    speed_mps = target_m / total_sec  # ~3.33 m/s
 
-    # 起点经纬度
-    start_lat = float(config.get('START_LATITUDE', 31.031599))
-    start_lon = float(config.get('START_LONGITUDE', 121.442938))
+    # 加密路线点并循环至目标距离
+    step_dist = speed_mps * interval
+    dense_coords = densify_route(coords, step_dist)
+    path_coords = build_path_for_distance(dense_coords, target_m, log_cb)
 
-    # 简单的经度偏移计算：在相同纬度上向东移动累计距离以达到目标距离。
-    # 1度纬度约等于 111111 米，1度经度约等于 111111 * cos(lat) 米
-    lat_rad = math.radians(start_lat)
-    meters_per_degree_lon = 111111 * math.cos(lat_rad)
+    # 更新起点坐标（用于 point-rule API 调用）
+    if path_coords:
+        config['START_LONGITUDE'] = path_coords[0][0]
+        config['START_LATITUDE'] = path_coords[0][1]
 
-    full_interpolated_points_with_time = []
+    # 生成带时间戳的轨迹点
+    base_time_ms = config.get('START_TIME_EPOCH_MS') or get_current_epoch_ms()
+    points = []
+    cum_dist = 0
 
-    current_locatetime_ms = config['START_TIME_EPOCH_MS'] if config.get('START_TIME_EPOCH_MS') is not None else get_current_epoch_ms()
-
-    for i in range(num_points):
+    for i, (lon, lat) in enumerate(path_coords):
         if stop_check_cb and stop_check_cb():
-            log_output("轨迹生成被中断。", "warning")
             raise SportsUploaderError("任务已停止。")
 
-        elapsed_sec = min(i * interval_seconds, total_duration_sec)
-        traveled_m = min(elapsed_sec * speed_mps, target_distance_m)
+        if i > 0:
+            prev_lon, prev_lat = path_coords[i - 1]
+            cum_dist += haversine_distance(prev_lat, prev_lon, lat, lon)
 
-        delta_lon_deg = traveled_m / meters_per_degree_lon if meters_per_degree_lon != 0 else 0
-        point_lat = start_lat
-        point_lon = start_lon + delta_lon_deg
+        t_ms = base_time_ms + int(cum_dist / speed_mps * 1000) if speed_mps > 0 else base_time_ms
 
-        formatted_lat = f"{point_lat:.{TRACK_POINT_DECIMAL_PLACES}f}"
-        formatted_lon = f"{point_lon:.{TRACK_POINT_DECIMAL_PLACES}f}"
+        fmt_lat = f"{lat:.{TRACK_POINT_DECIMAL_PLACES}f}"
+        fmt_lon = f"{lon:.{TRACK_POINT_DECIMAL_PLACES}f}"
 
-        point = {
-            "latLng": {"latitude": float(formatted_lat), "longitude": float(formatted_lon)},
-            "location": f"{formatted_lon},{formatted_lat}",
+        points.append({
+            "latLng": {"latitude": float(fmt_lat), "longitude": float(fmt_lon)},
+            "location": f"{fmt_lon},{fmt_lat}",
             "step": 0,
-            "locatetime": current_locatetime_ms
-        }
+            "locatetime": t_ms
+        })
 
-        full_interpolated_points_with_time.append(point)
-        current_locatetime_ms += interval_seconds * 1000
+    # 统计实际距离和时长
+    actual_dist = cum_dist
+    actual_sec = 0
+    if points:
+        actual_sec = max(1, (points[-1]['locatetime'] - points[0]['locatetime']) // 1000)
 
-    total_overall_distance = target_distance_m
+    tracks_list = split_track_into_segments(points, actual_sec, stop_check_cb=stop_check_cb)
 
-    actual_total_duration_sec = 0
-    if full_interpolated_points_with_time:
-        first_point_time_ms = full_interpolated_points_with_time[0]['locatetime']
-        last_point_time_ms = full_interpolated_points_with_time[-1]['locatetime']
-        actual_total_duration_sec = math.ceil((last_point_time_ms - first_point_time_ms + config['INTERVAL_SECONDS'] * 1000) / 1000)
-
-    tracks_list = split_track_into_segments(full_interpolated_points_with_time, actual_total_duration_sec, stop_check_cb=stop_check_cb)
-    actual_total_distance = sum(t['distance'] for t in tracks_list)
-
-    run_id = point_rules_data.get('rules', {}).get('id', 6)
-    if run_id == 6:
-        run_id = 9
-
-    sp_avg = 0
-    if actual_total_distance > 0 and actual_total_duration_sec > 0:
-        sp_avg = actual_total_duration_sec / (actual_total_distance / 1000) / 60
-        sp_avg = round(sp_avg)
+    # 配速计算
+    run_id = point_rules_data.get('rules', {}).get('id', 9)
+    sp_avg = round(actual_sec / (actual_dist / 1000) / 60) if actual_dist > 0 else 5
 
     rules_meta = point_rules_data.get('rules', {})
-    min_sp_s_per_km = rules_meta.get('spmin', 180)
-    max_sp_s_per_km = rules_meta.get('spmax', 540)
+    sp_min = rules_meta.get('spmin', 180)
+    sp_max = rules_meta.get('spmax', 540)
+    sp_avg_s = sp_avg * 60
 
-    sp_avg_s_per_km = sp_avg * 60 if sp_avg > 0 else 0
-
-    if actual_total_distance > 0:
-        if sp_avg_s_per_km < min_sp_s_per_km:
-            log_output(f"Warning: Calculated pace {sp_avg} min/km ({sp_avg_s_per_km:.0f} s/km) is faster than {min_sp_s_per_km / 60:.0f} min/km ({min_sp_s_per_km:.0f} s/km). Adjusting to minimum allowed pace.", "warning", log_cb)
-            sp_avg = math.ceil(min_sp_s_per_km / 60)
-        elif sp_avg_s_per_km > max_sp_s_per_km:
-            log_output(f"Warning: Calculated pace {sp_avg} min/km ({sp_avg_s_per_km:.0f} s/km) is slower than {max_sp_s_per_km / 60:.0f} min/km ({max_sp_s_per_km:.0f} s/km). Adjusting to maximum allowed pace.", "warning", log_cb)
-            sp_avg = math.floor(max_sp_s_per_km / 60)
+    if actual_dist > 0:
+        if sp_avg_s < sp_min:
+            log_output(f"配速 {sp_avg}min/km 过快，调整为 {math.ceil(sp_min / 60)}min/km", "warning", log_cb)
+            sp_avg = math.ceil(sp_min / 60)
+        elif sp_avg_s > sp_max:
+            log_output(f"配速 {sp_avg}min/km 过慢，调整为 {math.floor(sp_max / 60)}min/km", "warning", log_cb)
+            sp_avg = math.floor(sp_max / 60)
 
     request_body = [
         {
@@ -253,4 +309,4 @@ def generate_running_data_payload(config, required_signpoints, point_rules_data,
             "userId": config['USER_ID']
         }
     ]
-    return request_body, actual_total_distance, actual_total_duration_sec
+    return request_body, actual_dist, actual_sec
